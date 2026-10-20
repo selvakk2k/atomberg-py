@@ -1,0 +1,58 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Setup Atomberg Smart Lock",
+        "description": "Choose how you want to add your lock:",
+        "menu_options": {
+          "native": "Native Bluetooth Pairing (Zero-Snoop, recommended for new/reset locks)",
+          "cloud": "Sync from Atomberg Account (import already-paired locks from app)",
+          "manual": "Manual Key Entry (for users with existing MAC, Key, and Salt)"
+        }
+      },
+      "native": {
+        "title": "Native Bluetooth Pairing",
+        "description": "Put your Atomberg lock in pairing mode (press the setup button on the lock), select it from the list below, and Home Assistant will securely pair with it directly.",
+        "data": {
+          "mac_address": "Select Lock"
+        }
+      },
+      "cloud": {
+        "title": "Atomberg Cloud Account Sync",
+        "description": "Provide your Atomberg Cognito ID token to import all registered smart locks directly from your cloud profile.",
+        "data": {
+          "id_token": "Cognito ID Token"
+        }
+      },
+      "manual": {
+        "title": "Manual Key Entry",
+        "description": "Enter your lock's Bluetooth MAC address, 16-byte Master Key, and 4-byte Lock Salt.",
+        "data": {
+          "mac_address": "Bluetooth MAC Address (e.g. AA:BB:CC:11:22:33)",
+          "master_key": "Master Key (16-byte ASCII or 32-character hex)",
+          "salt": "Lock Salt (4-byte / 8-character hex, e.g. 1a2b3c4d)"
+        }
+      }
+    },
+    "error": {
+      "pairing_failed": "Failed to pair with lock over Bluetooth. Make sure the lock is in pairing mode and within range.",
+      "cloud_sync_failed": "Failed to retrieve lock credentials from Atomberg account.",
+      "no_locks_found": "No smart locks were found associated with this Atomberg account.",
+      "unknown": "An unexpected error occurred."
+    },
+    "abort": {
+      "already_configured": "This Atomberg lock is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "User Slot Mappings",
+        "description": "Assign user-friendly names to registered fingerprint and NFC card slot IDs.",
+        "data": {
+          "slot_mappings": "Slot Mappings (JSON dictionary)"
+        }
+      }
+    }
+  }
+}
