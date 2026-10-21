@@ -9,6 +9,7 @@ COGNITO_CLIENT_ID: Final[str] = "3cr9rf3urr1jvpn46fsd377uv0"
 COGNITO_DOMAIN: Final[str] = "auth.atomberg-iot.com"
 COGNITO_AUTHORIZE_URL: Final[str] = f"https://{COGNITO_DOMAIN}/oauth2/authorize"
 COGNITO_TOKEN_URL: Final[str] = f"https://{COGNITO_DOMAIN}/oauth2/token"
+COGNITO_REDIRECT_URI: Final[str] = "https://app.atomberg-iot.com"
 
 SERVER_API_BASE: Final[str] = "https://server.atomberg-iot.com"
 DEVELOPER_API_BASE: Final[str] = "https://api.developer.atomberg-iot.com/v2"

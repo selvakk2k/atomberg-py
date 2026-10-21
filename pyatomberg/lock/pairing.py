@@ -38,6 +38,8 @@ class PairingResult:
     mac_address: str
     master_key: bytes
     salt: bytes
+    name: str | None = None
+    model: str | None = None
 
     @property
     def master_key_hex(self) -> str:

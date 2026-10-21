@@ -19,9 +19,9 @@
       },
       "cloud": {
         "title": "Atomberg Cloud Account Sync",
-        "description": "Provide your Atomberg Cognito ID token to import all registered smart locks directly from your cloud profile.",
+        "description": "Sign in to your Atomberg account (supports Email, Google, Apple, or Facebook) and paste the redirected URL or authorization code below to import your locks.",
         "data": {
-          "id_token": "Cognito ID Token"
+          "auth_code": "Redirect URL or Authorization Code / Token"
         }
       },
       "manual": {

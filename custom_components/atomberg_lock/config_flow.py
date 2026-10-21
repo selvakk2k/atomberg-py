@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+import urllib.parse
 
 from homeassistant import config_entries
 from homeassistant.components import bluetooth
@@ -11,6 +12,8 @@ from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
 import voluptuous as vol
 
+from pyatomberg.auth.cognito import CognitoOAuthHandler
+from pyatomberg.const import COGNITO_REDIRECT_URI
 from pyatomberg.lock.cloud_sync import AtombergCloudSync
 from pyatomberg.lock.pairing import AtombergBLEPairingManager
 
@@ -39,6 +42,9 @@ class AtombergLockConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Initialize the flow."""
         self._discovered_macs: dict[str, str] = {}
         self._selected_mac: str | None = None
+        self._oauth_handler: CognitoOAuthHandler | None = None
+        self._pending_verifier: str | None = None
+        self._auth_url: str | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -102,36 +108,77 @@ class AtombergLockConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Import lock credentials from Atomberg cloud account."""
         errors: dict[str, str] = {}
 
+        if self._oauth_handler is None:
+            self._oauth_handler = CognitoOAuthHandler()
+            auth_url, _, verifier = self._oauth_handler.get_authorization_url(identity_provider=None)
+            self._auth_url = auth_url
+            self._pending_verifier = verifier
+
         if user_input is not None:
-            id_token = user_input.get("id_token", "").strip()
-            sync_client = AtombergCloudSync(id_token=id_token)
+            raw_input = user_input.get("auth_code", "").strip()
+            auth_token = raw_input
 
-            try:
-                locks = await sync_client.fetch_account_locks()
-                if not locks:
-                    errors["base"] = "no_locks_found"
-                else:
-                    first_lock = locks[0]
-                    await self.async_set_unique_id(first_lock.mac_address)
-                    self._abort_if_unique_id_configured()
+            # Check if user passed redirected URL or authorization code
+            if "code=" in raw_input or ("-" in raw_input and len(raw_input) < 60):
+                code = raw_input
+                if "code=" in raw_input:
+                    parsed = urllib.parse.urlparse(raw_input)
+                    qs = urllib.parse.parse_qs(parsed.query)
+                    if "code" in qs:
+                        code = qs["code"][0]
+                    else:
+                        for part in raw_input.split("&"):
+                            if part.startswith("code=") or "code=" in part:
+                                code = part.split("code=")[-1]
+                                break
 
-                    return self.async_create_entry(
-                        title=f"Atomberg Lock ({first_lock.mac_address})",
-                        data={
-                            CONF_MAC: first_lock.mac_address,
-                            CONF_MASTER_KEY: first_lock.master_key_hex,
-                            CONF_SALT: first_lock.salt_hex,
-                            CONF_PAIRING_METHOD: METHOD_CLOUD,
-                        },
+                try:
+                    tokens = await self._oauth_handler.exchange_code_for_tokens(
+                        code=code,
+                        code_verifier=self._pending_verifier,
+                        redirect_uri=COGNITO_REDIRECT_URI,
                     )
-            except Exception as err:
-                _LOGGER.exception("Cloud sync failed: %s", err)
-                errors["base"] = "cloud_sync_failed"
+                    auth_token = tokens.get("access_token") or tokens.get("id_token", "")
+                except Exception as err:
+                    _LOGGER.exception("Token exchange failed: %s", err)
+                    errors["base"] = "cloud_sync_failed"
+
+            if not errors and auth_token:
+                sync_client = AtombergCloudSync(access_token=auth_token)
+                try:
+                    locks = await sync_client.fetch_account_locks()
+                    if not locks:
+                        errors["base"] = "no_locks_found"
+                    else:
+                        first_lock = locks[0]
+                        await self.async_set_unique_id(first_lock.mac_address)
+                        self._abort_if_unique_id_configured()
+
+                        title = first_lock.name or f"Atomberg Lock ({first_lock.mac_address})"
+                        return self.async_create_entry(
+                            title=title,
+                            data={
+                                CONF_MAC: first_lock.mac_address,
+                                CONF_MASTER_KEY: first_lock.master_key_hex,
+                                CONF_SALT: first_lock.salt_hex,
+                                CONF_PAIRING_METHOD: METHOD_CLOUD,
+                                "name": first_lock.name or "Atomberg Smart Lock",
+                                "model": first_lock.model or "smart_lock",
+                            },
+                        )
+                except Exception as err:
+                    _LOGGER.exception("Cloud sync failed: %s", err)
+                    errors["base"] = "cloud_sync_failed"
 
         schema = vol.Schema({
-            vol.Required("id_token"): str,
+            vol.Required("auth_code"): str,
         })
-        return self.async_show_form(step_id="cloud", data_schema=schema, errors=errors)
+        return self.async_show_form(
+            step_id="cloud",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={"auth_url": self._auth_url or ""},
+        )
 
     async def async_step_manual(
         self, user_input: dict[str, Any] | None = None

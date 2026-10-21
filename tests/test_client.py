@@ -51,3 +51,59 @@ def test_fan_state_update_from_udp():
     assert fan.state.sleep is True
     assert fan.state.timer_hours == 2
     assert callback_called is True
+
+
+@pytest.mark.asyncio
+async def test_cloud_sync_parsing():
+    """Verify AtombergCloudSync correctly parses production app_open response."""
+    from unittest.mock import AsyncMock, MagicMock
+    from pyatomberg.lock.cloud_sync import AtombergCloudSync
+
+    mock_resp_data = {
+        "status": "Success",
+        "message": {
+            "user_details": {
+                "families": [
+                    {
+                        "family_id": "test_fam_1",
+                        "devices": [
+                            {
+                                "device_id": "63c9c483b94a",
+                                "friendly_name": "Entrance Lock",
+                                "model": "smart_lock_black",
+                                "metadata": {
+                                    "adminAuthCode": "00A00EC9",
+                                    "aes": "AgABfsR33DdoSdMe",
+                                    "bleProtocolVersion": "32",
+                                    "description": "Smart Lock",
+                                    "generalAuthCode": "482B2C89",
+                                    "lockMac": "63c9c483b94a",
+                                    "tempAuthCode": "04820A68",
+                                },
+                            }
+                        ],
+                    }
+                ]
+            }
+        },
+    }
+
+    mock_response = MagicMock()
+    mock_response.status = 200
+    mock_response.json = AsyncMock(return_value=mock_resp_data)
+
+    mock_session = MagicMock()
+    mock_session.closed = False
+    mock_session.get.return_value.__aenter__ = AsyncMock(return_value=mock_response)
+    mock_session.get.return_value.__aexit__ = AsyncMock(return_value=None)
+
+    client = AtombergCloudSync(access_token="test_access_token", session=mock_session)
+    locks = await client.fetch_account_locks()
+
+    assert len(locks) == 1
+    lock = locks[0]
+    assert lock.mac_address == "63:C9:C4:83:B9:4A"
+    assert lock.name == "Entrance Lock"
+    assert lock.model == "smart_lock_black"
+    assert lock.master_key == b"AgABfsR33DdoSdMe"
+    assert lock.salt == bytes.fromhex("00A00EC9")

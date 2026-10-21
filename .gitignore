@@ -45,3 +45,5 @@ Thumbs.db
 # Secrets & local env
 .env
 *.local.json
+live_tokens.json
+*oauth*.json

@@ -42,3 +42,19 @@ def test_cognito_authorization_url():
     assert "identity_provider=Google" in url
     assert f"state={state}" in url
     assert len(verifier) >= 43
+
+
+def test_cognito_universal_authorization_url():
+    """Verify universal authorization URL omits identity_provider for all sign-in options."""
+    handler = CognitoOAuthHandler(
+        client_id="test_client_id",
+        redirect_uri="https://app.atomberg-iot.com",
+    )
+    url, state, verifier = handler.get_authorization_url(identity_provider=None)
+
+    assert "https://auth.atomberg-iot.com/oauth2/authorize" in url
+    assert "client_id=test_client_id" in url
+    assert "identity_provider" not in url
+    assert "scope=aws.cognito.signin.user.admin+openid+email" in url
+    assert f"state={state}" in url
+    assert len(verifier) >= 43

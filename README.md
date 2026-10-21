@@ -2,7 +2,9 @@
 
 A standalone asynchronous Python library for controlling and monitoring Atomberg smart door locks (SL1, SL1 Pro) via Bluetooth Low Energy (BLE), featuring **native zero-snoop pairing**, **cloud key synchronization**, and **public API dynamic PIN generation**.
 
-> **Note on Ceiling Fans**: For Atomberg smart BLDC ceiling fans, please use [`dasshubham762/atomberg-integration`](https://github.com/dasshubham762/atomberg-integration), which is officially recommended by Atomberg in their developer documentation.
+> **Note on Ceiling Fans**:
+> - **Local IR Control (Zero Cloud)**: For local offline control of Atomberg BLDC ceiling fans via IR blasters (ESPHome, Broadlink, Tuya), check out **[`ha-bldc-fan-ir`](https://github.com/selvakk2k/ha-bldc-fan-ir)**.
+> - **Wi-Fi Cloud Control**: For Wi-Fi cloud control, see [`dasshubham762/atomberg-integration`](https://github.com/dasshubham762/atomberg-integration).
 
 ## Features
 

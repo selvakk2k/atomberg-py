@@ -13,6 +13,7 @@ import aiohttp
 from pyatomberg.const import (
     COGNITO_AUTHORIZE_URL,
     COGNITO_CLIENT_ID,
+    COGNITO_REDIRECT_URI,
     COGNITO_TOKEN_URL,
 )
 from pyatomberg.exceptions import AtombergAuthError, AtombergConnectionError
@@ -36,7 +37,7 @@ class CognitoOAuthHandler:
     def __init__(
         self,
         client_id: str = COGNITO_CLIENT_ID,
-        redirect_uri: str = "http://localhost:8080/callback",
+        redirect_uri: str = COGNITO_REDIRECT_URI,
         refresh_token: str | None = None,
         session: aiohttp.ClientSession | None = None,
     ) -> None:
@@ -77,7 +78,7 @@ class CognitoOAuthHandler:
         self,
         redirect_uri: str | None = None,
         identity_provider: str | None = None,
-        scope: str = "email openid profile",
+        scope: str = "aws.cognito.signin.user.admin openid email",
     ) -> tuple[str, str, str]:
         """Generate the Cognito Hosted UI authorization URL with PKCE.
 
