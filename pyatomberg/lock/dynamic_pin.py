@@ -35,7 +35,7 @@ class AtombergDynamicPinClient:
         self,
         device_id: str,
         series: str = "smart_lock_black",
-        duration_hours: int = 4,
+        duration_hours: float = 4.0,
         start_time: int | None = None,
     ) -> dict[str, Any]:
         """Generate a temporary guest PIN for a lock keypad.
@@ -54,7 +54,7 @@ class AtombergDynamicPinClient:
         if series == "smart_lock_black":
             start = start_time or int(time.time())
             body["start_time"] = start
-            body["end_time"] = start + (duration_hours * 3600)
+            body["end_time"] = start + int(duration_hours * 3600)
 
         session = self._session
         if session is None or session.closed:
@@ -75,3 +75,61 @@ class AtombergDynamicPinClient:
         finally:
             if self._owns_session and self._session and not self._session.closed:
                 await self._session.close()
+
+    async def generate_remote_otp(
+        self,
+        device_id: str,
+        series: str = "smart_lock_black",
+        arrival_window_minutes: int = 15,
+    ) -> dict[str, Any]:
+        """Generate an immediate single-use Remote OTP for a lock keypad.
+
+        This PIN works strictly once and is spent immediately upon unlocking.
+        """
+        now = int(time.time())
+        end_time = now + (arrival_window_minutes * 60)
+        res = await self.generate_guest_pin(
+            device_id=device_id,
+            series=series,
+            start_time=now,
+            duration_hours=max(0.25, arrival_window_minutes / 60.0),
+        )
+        pin_code = res.get("pin") or res.get("dynamic_pin") or res.get("code") or str(res)
+        return {
+            "otp": pin_code,
+            "type": "remote_one_time",
+            "device_id": device_id,
+            "created_at": now,
+            "expires_at": end_time,
+            "raw": res,
+        }
+
+    async def generate_timed_otp(
+        self,
+        device_id: str,
+        duration_hours: float = 4.0,
+        start_time: int | None = None,
+        series: str = "smart_lock_black",
+    ) -> dict[str, Any]:
+        """Generate a single-use Timed OTP that expires after the specified duration.
+
+        If not punched into the keypad before expiration, the lock hardware rejects it.
+        """
+        now = start_time or int(time.time())
+        end_time = now + int(duration_hours * 3600)
+        res = await self.generate_guest_pin(
+            device_id=device_id,
+            series=series,
+            start_time=now,
+            duration_hours=duration_hours,
+        )
+        pin_code = res.get("pin") or res.get("dynamic_pin") or res.get("code") or str(res)
+        return {
+            "otp": pin_code,
+            "type": "timed",
+            "device_id": device_id,
+            "created_at": now,
+            "expires_at": end_time,
+            "duration_hours": duration_hours,
+            "raw": res,
+        }

@@ -40,6 +40,8 @@ class PairingResult:
     salt: bytes
     name: str | None = None
     model: str | None = None
+    temp_auth_code: str | None = None
+    general_auth_code: str | None = None
 
     @property
     def master_key_hex(self) -> str:

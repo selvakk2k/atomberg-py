@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "pyatomberg"
 version = "0.1.0"
-description = "Python library for Atomberg smart door locks (SL1 / SL1 Pro) with native zero-snoop BLE pairing and cloud key sync"
+description = "Python library for Atomberg smart door locks (SL1 / SL1 Pro) and smart ceiling fans with BLE control and cloud sync"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "GPL-3.0-or-later"
@@ -15,7 +15,7 @@ authors = [
 classifiers = [
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
-    "License :: OSI Approved :: Apache Software License",
+    "License :: OSI Approved :: GNU General Public License v3 or later (GPLv3+)",
     "Operating System :: OS Independent",
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",

@@ -107,6 +107,9 @@ class AtombergCloudSync:
                         salt_hex = str(meta.get("adminAuthCode") or meta.get("generalAuthCode", "")).strip()
                         salt_bytes = bytes.fromhex(salt_hex)
 
+                        temp_code = meta.get("tempAuthCode")
+                        gen_code = meta.get("generalAuthCode")
+
                         results.append(
                             PairingResult(
                                 mac_address=mac,
@@ -114,6 +117,8 @@ class AtombergCloudSync:
                                 salt=salt_bytes,
                                 name=friendly_name,
                                 model=model,
+                                temp_auth_code=str(temp_code).strip() if temp_code else None,
+                                general_auth_code=str(gen_code).strip() if gen_code else None,
                             )
                         )
                         continue

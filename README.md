@@ -1,18 +1,26 @@
-# Atomberg Smart Lock Python Library (`atomberg-py`)
+# Atomberg Devices Python Library (`atomberg-py`)
 
-A standalone asynchronous Python library for controlling and monitoring Atomberg smart door locks (SL1, SL1 Pro) via Bluetooth Low Energy (BLE), featuring **native zero-snoop pairing**, **cloud key synchronization**, and **public API dynamic PIN generation**.
+[![Hardware Verified](https://img.shields.io/badge/Hardware-Verified%20(SL1%20Pro)-success.svg)](#features)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/pyatomberg.svg)](https://pypi.org/project/pyatomberg/)
 
-> **Note on Ceiling Fans**:
-> - **Local IR Control (Zero Cloud)**: For local offline control of Atomberg BLDC ceiling fans via IR blasters (ESPHome, Broadlink, Tuya), check out **[`ha-bldc-fan-ir`](https://github.com/selvakk2k/ha-bldc-fan-ir)**.
-> - **Wi-Fi Cloud Control**: For Wi-Fi cloud control, see [`dasshubham762/atomberg-integration`](https://github.com/dasshubham762/atomberg-integration).
+An asynchronous Python library for controlling and monitoring **Atomberg smart door locks** (SL1, SL1 Pro) via Bluetooth Low Energy (BLE) and **Atomberg smart ceiling fans** over local network UDP.
+
+> **Home Assistant Users**:
+> For the ready-to-use Home Assistant custom integration, see **[`ha-atomberg-lock`](https://github.com/selvakk2k/ha-atomberg-lock)**.
+> For offline local IR control of Atomberg ceiling fans, see **[`ha-bldc-fan-ir`](https://github.com/selvakk2k/ha-bldc-fan-ir)**.
+
+---
 
 ## Features
 
-- **Direct Offline BLE Control**: High-speed, local AES-128 encrypted locking, unlocking, and auto-relock tracking.
-- **Zero-Snoop Native Pairing**: Directly pairs new or reset locks from Home Assistant or Python without requiring Android Developer Options, ADB, or `btsnoop_hci.log` packet extraction.
-- **Cloud Account Key Sync**: For locks already configured in the Atomberg mobile app, automatically imports encryption credentials directly from your Atomberg account.
-- **Hardware Audit Logging**: Real-time decoding of unlock credentials (fingerprint slot, keypad PIN used, NFC card, mobile app, and manual thumbturn).
-- **Public API Guest PINs**: Generates temporary keypad OTP PINs via Atomberg's public HTTP API.
+- **Direct Offline BLE Control**: High-speed, local AES-128 encrypted locking, unlocking, and battery monitoring.
+- **Universal Cognito OAuth2 + PKCE**: Imports registered lock encryption credentials directly from your Atomberg account via AWS Cognito Hosted UI (Email, Google, Apple, or Facebook).
+- **Hardware Audit Logging**: Real-time decoding of credential unlock records (fingerprint slot, NFC card, keypad PIN, or mobile app).
+- **Remote & Timed OTP Keypad PINs**: Generates single-use remote OTPs and expirable timed guest PINs via Atomberg's dynamic PIN API.
+- **Local Fan Protocol**: Asynchronous UDP listener and state tracker for Atomberg Wi-Fi smart fans.
+
+---
 
 ## Installation
 
@@ -28,6 +36,8 @@ python -m venv .venv
 source .venv/bin/activate  # Or .venv\Scripts\activate on Windows
 pip install -e ".[dev]"
 ```
+
+---
 
 ## Quick Start: Smart Lock (BLE)
 
@@ -50,7 +60,35 @@ async def main():
 asyncio.run(main())
 ```
 
+---
+
+## Quick Start: Remote & Timed Guest OTPs
+
+```python
+import asyncio
+from pyatomberg.lock import AtombergDynamicPinClient
+
+async def main():
+    client = AtombergDynamicPinClient(
+        api_key="your_api_key",
+        access_token="your_access_token",
+    )
+
+    # 1. Immediate single-use Remote OTP (valid for 15 minutes, spent upon unlock)
+    remote_otp = await client.generate_remote_otp(device_id="your_device_id")
+    print(f"One-Time Code: {remote_otp['otp']}")
+
+    # 2. Timed OTP (valid for 4 hours, expires automatically)
+    timed_otp = await client.generate_timed_otp(device_id="your_device_id", duration_hours=4.0)
+    print(f"Timed Code: {timed_otp['otp']}, Expires: {timed_otp['expires_at']}")
+
+asyncio.run(main())
+```
+
+---
+
 ## Credits & License
 
 - Based on reverse-engineering and initial BLE protocol implementation by **[dreadedlama/atomberg-lock](https://github.com/dreadedlama/atomberg-lock)**.
+- Companion Home Assistant custom component: **[`ha-atomberg-lock`](https://github.com/selvakk2k/ha-atomberg-lock)**.
 - Licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE) for details.
