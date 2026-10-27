@@ -14,6 +14,12 @@ from typing import Any, Callable
 from bleak import BleakClient
 from bleak.backends.device import BLEDevice
 
+try:
+    from bleak_retry_connector import BleakClientWithServiceCache, establish_connection
+    HAVE_BLEAK_RETRY = True
+except ImportError:
+    HAVE_BLEAK_RETRY = False
+
 from pyatomberg.crypto import decrypt_aes_ecb
 from pyatomberg.exceptions import AtombergBLEError
 from pyatomberg.lock.hsj_protocol import (
@@ -207,10 +213,20 @@ class AtombergLock(AtombergDeviceModel):
     async def connect(self, timeout: float = 15.0) -> None:
         """Connect to lock over BLE and start notifications."""
         target: str | BLEDevice = self.ble_device if self.ble_device else self.mac_address
-        self.client = BleakClient(target, timeout=timeout)
 
         try:
-            await self.client.connect()
+            if HAVE_BLEAK_RETRY and isinstance(target, BLEDevice):
+                self.client = await establish_connection(
+                    BleakClientWithServiceCache,
+                    target,
+                    self.mac_address,
+                    max_attempts=3,
+                    use_services_cache=True,
+                )
+            else:
+                self.client = BleakClient(target, timeout=timeout)
+                await self.client.connect()
+
             self._clear_buffers()
             await self.client.start_notify(NOTIFY_UUID, self._notification_handler)
             await asyncio.sleep(0.5)

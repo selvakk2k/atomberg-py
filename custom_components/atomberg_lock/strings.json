@@ -2,40 +2,43 @@
   "config": {
     "step": {
       "user": {
-        "title": "Setup Atomberg Smart Lock",
-        "description": "Choose how you want to add your lock:",
+        "title": "Select Setup Mode",
+        "description": "Choose how you want to configure your Atomberg Smart Lock.",
         "menu_options": {
-          "native": "Native Bluetooth Pairing (Zero-Snoop, recommended for new/reset locks)",
-          "cloud": "Sync from Atomberg Account (import already-paired locks from app)",
-          "manual": "Manual Key Entry (for users with existing MAC, Key, and Salt)"
-        }
-      },
-      "native": {
-        "title": "Native Bluetooth Pairing",
-        "description": "Put your Atomberg lock in pairing mode (press the setup button on the lock), select it from the list below, and Home Assistant will securely pair with it directly.",
-        "data": {
-          "mac_address": "Select Lock"
+          "cloud": "Atomberg Cloud Account",
+          "manual": "Manual Key Entry"
+        },
+        "menu_option_descriptions": {
+          "cloud": "Import lock credentials automatically from your Atomberg app account (supports Email, Google, Apple, or Facebook).",
+          "manual": "Configure the lock using an existing Bluetooth MAC address, Master Key, and Lock Salt."
         }
       },
       "cloud": {
         "title": "Atomberg Cloud Account Sync",
-        "description": "Sign in to your Atomberg account (supports Email, Google, Apple, or Facebook) and paste the redirected URL or authorization code below to import your locks.",
+        "description": "Authenticate with your Atomberg account to import your smart locks:\n\n1. **[Click here to log in to Atomberg]({auth_url})** *(opens in a new tab)*.\n2. Sign in with Email, Google, Apple, or Facebook.\n3. After signing in, your browser redirects to a URL starting with `https://app.atomberg-iot.com/?code=...`.\n4. Copy the complete address from your browser's address bar and paste it below:\n\n*(If the link does not open, copy this URL into your browser: {auth_url})*",
         "data": {
-          "auth_code": "Redirect URL or Authorization Code / Token"
+          "auth_code": "Redirect URL or Authorization Code"
+        },
+        "data_description": {
+          "auth_code": "Paste the complete redirected URL (starting with https://app.atomberg-iot.com/?code=...) or the auth code."
         }
       },
       "manual": {
         "title": "Manual Key Entry",
         "description": "Enter your lock's Bluetooth MAC address, 16-byte Master Key, and 4-byte Lock Salt.",
         "data": {
-          "mac_address": "Bluetooth MAC Address (e.g. AA:BB:CC:11:22:33)",
-          "master_key": "Master Key (16-byte ASCII or 32-character hex)",
-          "salt": "Lock Salt (4-byte / 8-character hex, e.g. 1a2b3c4d)"
+          "mac_address": "Bluetooth MAC Address",
+          "master_key": "Master Key",
+          "salt": "Lock Salt"
+        },
+        "data_description": {
+          "mac_address": "12-digit hex MAC address (e.g. AA:BB:CC:11:22:33).",
+          "master_key": "16-byte ASCII key or 32-character hex key.",
+          "salt": "4-byte hex salt (e.g. 1a2b3c4d)."
         }
       }
     },
     "error": {
-      "pairing_failed": "Failed to pair with lock over Bluetooth. Make sure the lock is in pairing mode and within range.",
       "cloud_sync_failed": "Failed to retrieve lock credentials from Atomberg account.",
       "no_locks_found": "No smart locks were found associated with this Atomberg account.",
       "unknown": "An unexpected error occurred."
@@ -47,12 +50,30 @@
   "options": {
     "step": {
       "init": {
-        "title": "User Slot Mappings",
-        "description": "Assign user-friendly names to registered fingerprint and NFC card slot IDs.",
+        "title": "Select Credential Slot",
+        "description": "Select an enrolled credential slot from the dropdown to assign or update its name, or choose **Add Custom Slot Number...** to configure a specific slot.",
         "data": {
-          "slot_mappings": "Slot Mappings (JSON dictionary)"
+          "slot_id": "Slot"
+        },
+        "data_description": {
+          "slot_id": "Select a discovered fingerprint, NFC card, or PIN slot to configure."
+        }
+      },
+      "edit_slot": {
+        "title": "Configure Slot {slot_id}",
+        "description": "Enter the display name for credential slot **{slot_id}** (e.g. 'Selva Right Thumb' or 'Guest NFC Card'). Leave blank to remove.",
+        "data": {
+          "slot_id": "Slot Number",
+          "name": "Name"
+        },
+        "data_description": {
+          "slot_id": "Slot number (1 to 65534).",
+          "name": "Display name used for this credential in Home Assistant."
         }
       }
+    },
+    "error": {
+      "invalid_slot": "Please enter a valid slot number between 1 and 65534."
     }
   }
 }

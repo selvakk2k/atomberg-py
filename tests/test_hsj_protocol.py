@@ -125,7 +125,7 @@ def test_parse_log_record():
     rec[9] = 0x01                               # fingerprint
     rec[10:12] = (20).to_bytes(2, "big")        # slot_id (Right Thumb)
 
-    parsed = parse_log_record(bytes(rec))
+    parsed = parse_log_record(bytes(rec), slot_mappings={20: "Right Thumb"})
     assert parsed["battery"] == 88
     assert parsed["event"] == "Unlocked Successfully"
     assert "Right Thumb" in parsed["detail"]

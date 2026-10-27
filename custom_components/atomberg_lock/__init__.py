@@ -7,6 +7,13 @@ under GNU General Public License v3.0.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
+import sys
+
+# Ensure bundled pyatomberg can be imported directly
+_LIB_PATH = str(Path(__file__).parent)
+if _LIB_PATH not in sys.path:
+    sys.path.insert(0, _LIB_PATH)
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
@@ -17,7 +24,7 @@ from .coordinator import AtombergLockCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
-PLATFORMS: list[Platform] = [Platform.LOCK, Platform.SENSOR]
+PLATFORMS: list[Platform] = [Platform.LOCK, Platform.SENSOR, Platform.BUTTON]
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -25,6 +32,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})
 
     coordinator = AtombergLockCoordinator(hass, entry)
+    await coordinator.async_start()
     hass.data[DOMAIN][entry.entry_id] = coordinator
 
     # Initial battery & status check in background
@@ -48,6 +56,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         coordinator: AtombergLockCoordinator = hass.data[DOMAIN].pop(entry.entry_id)
+        coordinator.async_stop()
         if coordinator._relock_task and not coordinator._relock_task.done():
             coordinator._relock_task.cancel()
         if coordinator._lock_device:

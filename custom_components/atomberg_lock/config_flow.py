@@ -3,19 +3,27 @@
 from __future__ import annotations
 
 import logging
+from pathlib import Path
+import sys
 from typing import Any
 import urllib.parse
+
+# Ensure bundled pyatomberg can be imported directly
+_LIB_PATH = str(Path(__file__).parent)
+if _LIB_PATH not in sys.path:
+    sys.path.insert(0, _LIB_PATH)
 
 from homeassistant import config_entries
 from homeassistant.components import bluetooth
 from homeassistant.core import callback
 from homeassistant.data_entry_flow import FlowResult
+from homeassistant.helpers import selector
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 import voluptuous as vol
 
 from pyatomberg.auth.cognito import CognitoOAuthHandler
 from pyatomberg.const import COGNITO_REDIRECT_URI
 from pyatomberg.lock.cloud_sync import AtombergCloudSync
-from pyatomberg.lock.pairing import AtombergBLEPairingManager
 
 from .const import (
     CONF_MAC,
@@ -27,7 +35,6 @@ from .const import (
     DOMAIN,
     METHOD_CLOUD,
     METHOD_MANUAL,
-    METHOD_NATIVE,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -40,7 +47,6 @@ class AtombergLockConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     def __init__(self) -> None:
         """Initialize the flow."""
-        self._discovered_macs: dict[str, str] = {}
         self._selected_mac: str | None = None
         self._oauth_handler: CognitoOAuthHandler | None = None
         self._pending_verifier: str | None = None
@@ -49,58 +55,11 @@ class AtombergLockConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Choose between Native Pairing, Cloud Sync, or Manual Key Entry."""
+        """Choose between Cloud Account Sync or Manual Key Entry."""
         return self.async_show_menu(
             step_id="user",
-            menu_options=[METHOD_NATIVE, METHOD_CLOUD, METHOD_MANUAL],
+            menu_options=[METHOD_CLOUD, METHOD_MANUAL],
         )
-
-    async def async_step_native(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Native Zero-Snoop Bluetooth pairing."""
-        errors: dict[str, str] = {}
-
-        # Scan for nearby Bluetooth devices
-        current_macs = self._async_current_ids()
-        for service_info in bluetooth.async_discovered_service_info(self.hass, connectable=True):
-            mac = service_info.address.upper()
-            if mac not in current_macs:
-                name = service_info.name or f"Unknown Lock ({mac})"
-                self._discovered_macs[mac] = f"{name} [{mac}]"
-
-        if user_input is not None:
-            mac = user_input[CONF_MAC]
-            await self.async_set_unique_id(mac.upper())
-            self._abort_if_unique_id_configured()
-
-            # Execute native pairing handshake
-            pairing_manager = AtombergBLEPairingManager()
-            try:
-                ble_device = bluetooth.async_ble_device_from_address(self.hass, mac, connectable=True)
-                if not ble_device:
-                    raise ValueError("Device not found by Bluetooth scanner")
-
-                result = await pairing_manager.pair_device(ble_device)
-                return self.async_create_entry(
-                    title=f"Atomberg Lock ({mac})",
-                    data={
-                        CONF_MAC: result.mac_address,
-                        CONF_MASTER_KEY: result.master_key_hex,
-                        CONF_SALT: result.salt_hex,
-                        CONF_PAIRING_METHOD: METHOD_NATIVE,
-                    },
-                )
-            except Exception as err:
-                _LOGGER.exception("Native pairing failed: %s", err)
-                errors["base"] = "pairing_failed"
-
-        schema = vol.Schema({
-            vol.Required(CONF_MAC): vol.In(self._discovered_macs)
-            if self._discovered_macs
-            else str
-        })
-        return self.async_show_form(step_id="native", data_schema=schema, errors=errors)
 
     async def async_step_cloud(
         self, user_input: dict[str, Any] | None = None
@@ -108,8 +67,9 @@ class AtombergLockConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Import lock credentials from Atomberg cloud account."""
         errors: dict[str, str] = {}
 
+        session = async_get_clientsession(self.hass)
         if self._oauth_handler is None:
-            self._oauth_handler = CognitoOAuthHandler()
+            self._oauth_handler = CognitoOAuthHandler(session=session)
             auth_url, _, verifier = self._oauth_handler.get_authorization_url(identity_provider=None)
             self._auth_url = auth_url
             self._pending_verifier = verifier
@@ -144,7 +104,7 @@ class AtombergLockConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     errors["base"] = "cloud_sync_failed"
 
             if not errors and auth_token:
-                sync_client = AtombergCloudSync(access_token=auth_token)
+                sync_client = AtombergCloudSync(access_token=auth_token, session=session)
                 try:
                     locks = await sync_client.fetch_account_locks()
                     if not locks:
@@ -222,20 +182,128 @@ class AtombergLockOptionsFlow(config_entries.OptionsFlow):
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         """Initialize options flow."""
-        self.config_entry = config_entry
+        self._config_entry = config_entry
+        self._selected_slot: str | None = None
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> FlowResult:
-        """Manage user slot mappings."""
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
+        """Step 1: Choose which slot to name or configure."""
+        raw_mappings = dict(self._config_entry.options.get(CONF_SLOT_MAPPINGS, {}))
+        current_mappings = {int(k): str(v) for k, v in raw_mappings.items() if str(k).isdigit()}
 
-        current_mappings = self.config_entry.options.get(CONF_SLOT_MAPPINGS, {})
+        # Retrieve discovered slots from coordinator if running
+        discovered: dict[int, str] = {}
+        coordinator = self.hass.data.get(DOMAIN, {}).get(self._config_entry.entry_id)
+        if coordinator and hasattr(coordinator, "discovered_slots"):
+            discovered = dict(coordinator.discovered_slots)
+
+        known_slots = set(current_mappings.keys()) | set(discovered.keys())
+        if not known_slots:
+            known_slots = {14}
+
+        if user_input is not None:
+            self._selected_slot = user_input.get("slot_id")
+            return await self.async_step_edit_slot()
+
+        # Build dropdown options
+        select_options: list[selector.SelectOptionDict] = []
+        for slot_num in sorted(known_slots):
+            cred_type = discovered.get(slot_num, "Enrolled Credential")
+            curr_name = current_mappings.get(slot_num)
+            if curr_name:
+                label = f"Slot {slot_num}: {curr_name} ({cred_type})"
+            else:
+                label = f"Slot {slot_num}: {cred_type}"
+            select_options.append(selector.SelectOptionDict(value=str(slot_num), label=label))
+
+        select_options.append(
+            selector.SelectOptionDict(value="custom", label="Add Custom Slot Number...")
+        )
+
+        default_slot = str(sorted(known_slots)[0])
+
         schema = vol.Schema({
-            vol.Optional(
-                CONF_SLOT_MAPPINGS,
-                default=current_mappings,
-            ): dict,
+            vol.Required("slot_id"): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=select_options,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
         })
+        schema = self.add_suggested_values_to_schema(schema, {"slot_id": default_slot})
+
         return self.async_show_form(step_id="init", data_schema=schema)
+
+    async def async_step_edit_slot(
+        self, user_input: dict[str, Any] | None = None
+    ) -> FlowResult:
+        """Step 2: Assign or update the name for the selected slot."""
+        errors: dict[str, str] = {}
+        raw_mappings = dict(self._config_entry.options.get(CONF_SLOT_MAPPINGS, {}))
+        current_mappings = {int(k): str(v) for k, v in raw_mappings.items() if str(k).isdigit()}
+
+        is_custom = self._selected_slot == "custom"
+        target_slot: int | None = None
+        if not is_custom and self._selected_slot is not None:
+            try:
+                target_slot = int(self._selected_slot)
+            except ValueError:
+                pass
+
+        if user_input is not None:
+            name = user_input.get("name", "").strip()
+            if is_custom:
+                raw_slot = user_input.get("slot_id")
+                try:
+                    target_slot = int(raw_slot) if raw_slot is not None else None
+                except (ValueError, TypeError):
+                    target_slot = None
+
+            if target_slot is not None and target_slot > 0:
+                updated_mappings = dict(current_mappings)
+                if name:
+                    updated_mappings[target_slot] = name
+                else:
+                    updated_mappings.pop(target_slot, None)
+
+                return self.async_create_entry(
+                    title="",
+                    data={CONF_SLOT_MAPPINGS: {str(k): v for k, v in updated_mappings.items()}},
+                )
+            errors["base"] = "invalid_slot"
+
+        fields: dict[Any, Any] = {}
+        suggested: dict[str, Any] = {}
+
+        if is_custom:
+            fields[vol.Required("slot_id")] = selector.NumberSelector(
+                selector.NumberSelectorConfig(
+                    min=1,
+                    max=65534,
+                    step=1,
+                    mode=selector.NumberSelectorMode.BOX,
+                )
+            )
+            fields[vol.Optional("name", default="")] = selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
+            )
+            slot_title_placeholder = "New"
+        else:
+            fields[vol.Optional("name", default="")] = selector.TextSelector(
+                selector.TextSelectorConfig(type=selector.TextSelectorType.TEXT)
+            )
+            if target_slot is not None and target_slot in current_mappings:
+                suggested["name"] = current_mappings[target_slot]
+            slot_title_placeholder = str(target_slot)
+
+        schema = vol.Schema(fields)
+        if suggested:
+            schema = self.add_suggested_values_to_schema(schema, suggested)
+
+        return self.async_show_form(
+            step_id="edit_slot",
+            data_schema=schema,
+            errors=errors,
+            description_placeholders={"slot_id": slot_title_placeholder},
+        )

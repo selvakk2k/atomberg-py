@@ -34,12 +34,7 @@ OP_LOG_COUNT = bytes.fromhex("0008")
 OP_LOG_PAGE = bytes.fromhex("0009")
 OP_LIVE_EVENT = 0x000A
 
-DEFAULT_SLOT_MAPPINGS: dict[int, str] = {
-    13: "NFC Card 1",
-    14: "NFC Card 2",
-    17: "Left Thumb",
-    20: "Right Thumb",
-}
+DEFAULT_SLOT_MAPPINGS: dict[int, str] = {}
 
 
 def slot_name(slot: int, slot_mappings: dict[int, str] | None = None) -> str:
@@ -274,6 +269,12 @@ def parse_log_record(rec: bytes, slot_mappings: dict[int, str] | None = None) ->
         cred_type_name = "Credential Enrollment"
         slot = int.from_bytes(rec[11:13], "big")
         detail = f"Enrolled - {slot_name(slot, slot_mappings)}"
+
+    elif event_cat == 0x3D:
+        event = "Auto-Lock / Latch"
+        cred_type_name = "System Auto-Lock"
+        detail = "Auto-Lock / Latch Engaged"
+        slot = 0
 
     return {
         "datetime": format_ist_time(ts),

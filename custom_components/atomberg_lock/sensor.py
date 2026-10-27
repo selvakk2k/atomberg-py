@@ -89,8 +89,15 @@ class AtombergLastUserSensor(AtombergLockBaseEntity, SensorEntity):
         event = self.coordinator.last_event
         if not event:
             return None
-        if event.slot_id == 0 or not event.slot_id:
-            return event.credential_type
+        if event.slot_id in (0, 0xFFFF, 65535) or not event.slot_id:
+            return event.credential_type or event.event
+        if self.coordinator.slot_mappings:
+            if event.slot_id in self.coordinator.slot_mappings:
+                return self.coordinator.slot_mappings[event.slot_id]
+            if str(event.slot_id) in self.coordinator.slot_mappings:
+                return self.coordinator.slot_mappings[str(event.slot_id)]
+        if event.credential_type and event.credential_type != "Physical Credential":
+            return f"{event.credential_type} {event.slot_id}"
         return slot_name(event.slot_id, self.coordinator.slot_mappings)
 
 
