@@ -1,10 +1,11 @@
 # Atomberg Devices Python Library (`atomberg-py`)
 
-[![Hardware Verified](https://img.shields.io/badge/Hardware-Verified%20(SL1%20Pro)-success.svg)](#features)
+[![Hardware Verified](https://img.shields.io/badge/Hardware-Verified%20(SL1%20Pro)-success.svg)](#hardware-compatibility-matrix)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/pyatomberg.svg)](https://pypi.org/project/pyatomberg/)
+[![AI-Assisted](https://img.shields.io/badge/AI%20Assisted-Antigravity%20%7C%20Claude-blueviolet?style=flat-square&logo=google)](https://github.com/selvakk2k)
 
-An asynchronous Python library for authentication, discovery, and control of **Atomberg smart home devices** (smart door locks, smart ceiling fans, and connected appliances).
+An asynchronous Python client library for authentication, discovery, and control of **Atomberg smart home appliances** (smart door locks, smart ceiling fans, and connected appliances).
 
 > [!NOTE]
 > **Ceiling Fan Integration**:
@@ -12,35 +13,148 @@ An asynchronous Python library for authentication, discovery, and control of **A
 
 ---
 
-## Features
+## Table of Contents
 
-- **Universal Authentication Engine**: Native AWS Cognito OAuth2 + PKCE supporting Email, Google, Apple, and Facebook logins, plus official Developer API token management.
-- **Multi-Device Discovery**: Discovers and imports paired smart locks, ceiling fans, and connected appliances associated with your Atomberg account.
-- **Direct Offline BLE Lock Control**: High-speed, local AES-128 encrypted locking, unlocking, and battery monitoring for SL1 / SL1 Pro smart locks.
-- **Offline Dynamic OTP PINs**: Offline algorithmic generation of single-use remote OTPs and expirable timed guest PINs with automatic half-hour boundary quantization.
-- **Hardware Audit Logging**: Real-time decoding of credential unlock records (fingerprint slot, NFC card, keypad PIN, or mobile app).
-- **Local Fan Protocol**: Asynchronous UDP listener and state tracker for Atomberg Wi-Fi smart fans.
+- [Overview & Reverse-Engineering Context](#overview--reverse-engineering-context)
+- [Hardware Compatibility Matrix](#hardware-compatibility-matrix)
+- [Installation & Requirements](#installation--requirements)
+- [Authentication Pathways](#authentication-pathways)
+  - [Method A: Universal Cognito OAuth2 + PKCE (Recommended)](#method-a-universal-cognito-oauth2--pkce-recommended)
+  - [Method B: Official Developer API Token](#method-b-official-developer-api-token)
+- [Quick Start by Device Category](#quick-start-by-device-category)
+  - [1. Universal Multi-Device Discovery](#1-universal-multi-device-discovery)
+  - [2. Smart Door Locks: Local BLE Control](#2-smart-door-locks-local-ble-control)
+  - [3. Smart Door Locks: Offline Dynamic OTP Generation](#3-smart-door-locks-offline-dynamic-otp-generation)
+  - [4. Smart Ceiling Fans: Local UDP Broadcast & Cloud Control](#4-smart-ceiling-fans-local-udp-broadcast--cloud-control)
+  - [5. Connected Appliances: Water Purifiers](#5-connected-appliances-water-purifiers)
+- [Supported Capabilities vs. Known Limitations](#supported-capabilities-vs-known-limitations)
+- [Testing & Quality Assurance](#testing--quality-assurance)
+- [Credits & License](#credits--license)
+  - [Disclaimer](#disclaimer)
+  - [Author & Contributors](#author--contributors)
 
 ---
 
-## Installation
+## Overview & Reverse-Engineering Context
+
+Atomberg provides an official Developer Portal and API (`https://api.developer.atomberg-iot.com`). However, relying exclusively on this official API presents several practical constraints:
+
+1. **Mandatory Ceiling Fan Dependency**: In the official Atomberg Android/iOS application (`com.atomberg.app`), the Developer Options menu (`DeveloperOptionsScreen`) is strictly hidden unless the user has at least one smart ceiling fan registered to their account. Users who own only smart locks or smart appliances cannot activate developer mode or generate developer tokens.
+2. **Missing Local BLE Credentials**: The official cloud API does not provide Bluetooth Low Energy (BLE) authentication keys or master credentials for smart door locks.
+3. **No Offline Support**: The developer API requires active internet connectivity for all actions, including guest keypad PIN generation, introducing network latency and cloud dependency.
+
+To overcome these barriers, `atomberg-py` reverse-engineers the official Atomberg application protocol and combines two distinct control tiers:
+
+* **Universal Cloud Layer**: Uses native AWS Cognito OAuth2 with PKCE (supporting Email, Google, Apple, and Facebook logins) to discover all registered appliances across any user account.
+* **100% Offline Local Layer**: Provides direct Bluetooth Low Energy (BLE) AES-128 control for smart locks, offline algorithmic OTP PIN calculations that require zero network requests, and local network UDP broadcast listeners for smart ceiling fans.
+
+---
+
+## Hardware Compatibility Matrix
+
+| Category | Models / Series | Key Functions & Sensors | Integration Mode | Status |
+| :--- | :--- | :--- | :--- | :--- |
+| **Authentication** | AWS Cognito OAuth2 | Email, Google, Apple, Facebook | Cloud REST + OAuth2 / PKCE | `✅ Hardware Verified` |
+| **Authentication** | Official Developer API | Refresh Token Exchange (`v2`) | Cloud REST (`api.developer.atomberg-iot.com`) | `✅ Hardware Verified` |
+| **Smart Door Locks** | SL1, SL1 Pro (`smart_lock_black`) | BLE AES-128 Unlock, Battery, Live Notifications, Flash Audit Log Sync | Direct Local BLE (GATT) | `✅ Hardware Verified` |
+| **Smart Door Locks** | Dynamic Keypad PINs | Remote Single-Use OTP, Timed Guest OTPs with IST Half-Hour Quantization | 100% Offline HMAC-SHA256 Derivation | `✅ Hardware Verified` |
+| **Smart Door Locks** | Cypheo Elite (`G1`) | Clock-Derived Rolling PINs | Cloud API / Algorithmic Derivation | `⚠️ API Modeled` |
+| **Smart Ceiling Fans** | Renesa, Studio, Aris, Wave | State Tracking (Speed, Power, Timer, Breeze, Sleep) | Local UDP Broadcast (Port 5625) | `✅ Hardware Verified` |
+| **Smart Ceiling Fans** | All Wi-Fi Series | Speed Selection (1–6), Mode Switching, Power Toggle | Cloud REST via Developer API / Cognito | `✅ Hardware Verified` |
+| **Water Purifiers** | Connected Purifiers | Dispense State, Filter Health, TDS Telemetry | Cloud REST / Internal State Dict | `⚠️ API Modeled` |
+
+---
+
+## Installation & Requirements
+
+Install `pyatomberg` directly using `pip`:
 
 ```bash
 pip install pyatomberg
 ```
 
-For development:
+For local development or testing from source:
+
 ```bash
 git clone https://github.com/selvakk2k/atomberg-py.git
 cd atomberg-py
 python -m venv .venv
-source .venv/bin/activate  # Or .venv\Scripts\activate on Windows
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
 ---
 
-## Quick Start: Smart Lock (BLE)
+## Authentication Pathways
+
+`atomberg-py` supports two authentication methods depending on your account setup:
+
+### Method A: Universal Cognito OAuth2 + PKCE (Recommended)
+
+This method mirrors the official mobile app and works for **all** Atomberg accounts, whether you own a lock, a fan, or another connected appliance:
+
+```python
+import asyncio
+from pyatomberg.auth.cognito import CognitoOAuthHandler
+
+async def main():
+    auth = CognitoOAuthHandler()
+    
+    # 1. Generate the authorization URL for user login
+    login_url = auth.get_authorization_url()
+    print(f"Open this URL in your browser:\n{login_url}\n")
+    
+    # 2. After logging in, copy the redirect URL (starts with https://app.atomberg-iot.com/?code=...)
+    redirect_url = input("Paste the redirected URL: ")
+    
+    # 3. Exchange code for access tokens
+    tokens = await auth.exchange_code_for_tokens(redirect_url)
+    print("Authentication successful! Access Token acquired.")
+
+asyncio.run(main())
+```
+
+### Method B: Official Developer API Token
+
+If you own an Atomberg smart ceiling fan and have activated the Developer Options in the Atomberg app:
+
+```python
+from pyatomberg.auth.developer import DeveloperTokenHandler
+
+handler = DeveloperTokenHandler(
+    refresh_token="your_developer_refresh_token_from_app",
+    api_key="your_optional_api_key",
+)
+```
+
+---
+
+## Quick Start by Device Category
+
+### 1. Universal Multi-Device Discovery
+
+Query your Atomberg account to list all registered locks, fans, and appliances:
+
+```python
+import asyncio
+from pyatomberg.client import AtombergClient
+
+async def main():
+    # Initialize with either developer_token or a configured cognito_handler
+    async with AtombergClient(developer_token="your_refresh_token") as client:
+        # Discover registered ceiling fans
+        fans = await client.get_fans()
+        for fan in fans:
+            print(f"Fan: {fan.name} (ID: {fan.device_id}, Model: {fan.model_name})")
+
+asyncio.run(main())
+```
+
+---
+
+### 2. Smart Door Locks: Local BLE Control
+
+Communicate directly with Atomberg SL1 / SL1 Pro door locks over Bluetooth Low Energy using AES-128 encryption:
 
 ```python
 import asyncio
@@ -49,13 +163,26 @@ from pyatomberg.lock import AtombergLock
 async def main():
     lock = AtombergLock(
         mac_address="AA:BB:CC:11:22:33",
-        master_key=b"0123456789abcdef",
-        salt=bytes.fromhex("1a2b3c4d"),
+        master_key=b"0123456789abcdef",  # 16-byte master key
+        salt=bytes.fromhex("1a2b3c4d"),    # 4-byte salt
     )
+
+    # Register callback for live physical events (keypad, fingerprint, RFID card)
+    def handle_event(event):
+        print(f"Lock event: {event.event} via {event.credential_type} (Slot: {event.slot_id})")
+
+    lock.register_event_callback(handle_event)
+
     await lock.connect()
     await lock.authenticate()
-    print(f"Battery: {await lock.get_battery()}%")
+    
+    # Read battery level
+    battery = await lock.get_battery()
+    print(f"Lock Battery Level: {battery}%")
+
+    # Unlock door latch
     await lock.unlock()
+    
     await lock.disconnect()
 
 asyncio.run(main())
@@ -63,32 +190,132 @@ asyncio.run(main())
 
 ---
 
-## Quick Start: Remote & Timed Guest OTPs
+### 3. Smart Door Locks: Offline Dynamic OTP Generation
+
+Atomberg door locks feature an internal algorithmic keypad PIN engine. You can calculate valid 8-digit OTP codes entirely offline without making any network requests or cloud calls:
+
+```python
+import datetime
+from pyatomberg.lock.dynamic_pin import calculate_offline_otp, quantize_expiration_time
+
+# 1. Single-Use Remote OTP (valid until next :00 or :30 half-hour boundary in IST)
+remote_expiry = quantize_expiration_time(duration_hours=0.5)
+remote_otp = calculate_offline_otp(
+    auth_code="482B2C89",
+    aes_key="AgABfsR33DdoSdMe",
+    target_dt=remote_expiry,
+    lock_mac="63C9C483B94A",
+    slot_index=0,
+)
+print(f"Remote OTP: {remote_otp} (Valid until: {remote_expiry.isoformat()})")
+
+# 2. Timed Guest OTP (valid for 4 hours, quantized to nearest boundary)
+guest_expiry = quantize_expiration_time(duration_hours=4.0)
+guest_otp = calculate_offline_otp(
+    auth_code="482B2C89",
+    aes_key="AgABfsR33DdoSdMe",
+    target_dt=guest_expiry,
+    lock_mac="63C9C483B94A",
+    slot_index=1,
+)
+print(f"4-Hour Guest OTP: {guest_otp} (Valid until: {guest_expiry.isoformat()})")
+```
+
+---
+
+### 4. Smart Ceiling Fans: Local UDP Broadcast & Cloud Control
+
+#### Real-Time Local UDP Broadcast Listener
+Atomberg Wi-Fi ceiling fans broadcast unencrypted JSON/HAProxy status packets across the local subnet on UDP port 5625:
 
 ```python
 import asyncio
-from pyatomberg.lock import AtombergDynamicPinClient
+from pyatomberg.fan.udp_listener import AtombergUDPListener
+
+def on_packet(device_id: str, data: dict):
+    print(f"Fan {device_id} broadcast -> Speed: {data.get('speed')}, Power: {data.get('power')}")
 
 async def main():
-    client = AtombergDynamicPinClient(
-        api_key="your_api_key",
-        access_token="your_access_token",
-    )
+    listener = AtombergUDPListener(callback=on_packet, port=5625)
+    await listener.start()
+    print("Listening for local fan UDP broadcasts on port 5625...")
+    await asyncio.sleep(60)
+    await listener.stop()
 
-    # 1. Immediate single-use Remote OTP (valid for 15 minutes, spent upon unlock)
-    remote_otp = await client.generate_remote_otp(device_id="your_device_id")
-    print(f"One-Time Code: {remote_otp['otp']}")
+asyncio.run(main())
+```
 
-    # 2. Timed OTP (valid for 4 hours, expires automatically)
-    timed_otp = await client.generate_timed_otp(device_id="your_device_id", duration_hours=4.0)
-    print(f"Timed Code: {timed_otp['otp']}, Expires: {timed_otp['expires_at']}")
+#### Cloud API Control
+```python
+import asyncio
+from pyatomberg.client import AtombergClient
+
+async def main():
+    async with AtombergClient(developer_token="your_refresh_token") as client:
+        # Set fan speed (1 to 6)
+        await client.send_command("device_id_here", {"power": 1, "speed": 4})
+        
+        # Turn off fan
+        await client.send_command("device_id_here", {"power": 0})
 
 asyncio.run(main())
 ```
 
 ---
 
+### 5. Connected Appliances: Water Purifiers
+
+The library provides abstract state models for Atomberg's connected appliance ecosystem:
+
+```python
+from pyatomberg.models.device import DeviceType, WaterPurifierState
+
+# Modeled state structure from mobile app reverse engineering
+purifier = WaterPurifierState(
+    is_dispensing=False,
+    tds_in=450,
+    tds_out=38,
+    filter_life_remaining_percent=85,
+)
+print(f"Filter Health: {purifier.filter_life_remaining_percent}% (TDS: {purifier.tds_out} ppm)")
+```
+
+---
+
+## Supported Capabilities vs. Known Limitations
+
+To set clear expectations, here are the architectural boundaries of the library:
+
+| Functionality | Supported | Architectural Reason / Detail |
+| :--- | :--- | :--- |
+| **Direct BLE Lock Unlock** | Yes | Communicates via local Bluetooth GATT characteristics with AES-128 encryption. |
+| **Offline Lock OTPs** | Yes | Calculated offline via HMAC-SHA256 and IST half-hour time quantization matching lock firmware. |
+| **Lock Remote Unlock over Wi-Fi** | No | Atomberg SL1 / SL1 Pro hardware has no onboard Wi-Fi chip. Remote access requires an active BLE proxy (e.g. ESPHome Bluetooth Proxy or local Bluetooth adapter). |
+| **Developer API without a Fan** | No | Atomberg mobile app enforces a UI restriction that hides Developer Options if no fan is enrolled. Use Cognito OAuth2 instead. |
+| **Fan Local UDP Telemetry** | Yes | Fans broadcast real-time state packets on UDP port 5625. |
+| **Water Purifier Cloud Control** | Modeled | Data schemas and models are defined from app disassembly; live hardware verification is pending. |
+
+---
+
+## Testing & Quality Assurance
+
+The test suite contains automated tests covering crypto primitives, CRC16 verification, packet serialization, time quantization, and hardware test vectors:
+
+```bash
+# Run pytest test suite
+pytest tests/ -v
+```
+
+---
+
 ## Credits & License
 
-- Based on reverse-engineering and initial BLE protocol implementation by **[dreadedlama/atomberg-lock](https://github.com/dreadedlama/atomberg-lock)**.
-- Licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE) for details.
+### Disclaimer
+`pyatomberg` is an independent, open-source project and is not affiliated with, endorsed by, or sponsored by Atomberg Technologies Pvt. Ltd. All product names, trademarks, and registered trademarks are property of their respective owners.
+
+### Author & Contributors
+* **Architecture & Lead Engineering**: [@selvakk2k](https://github.com/selvakk2k)
+* **Code Implementation & Engineering**: **Antigravity** (Google DeepMind)
+* **Code Review & Pre-Release Auditing**: **Claude** (Anthropic)
+
+Licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE) for details.
