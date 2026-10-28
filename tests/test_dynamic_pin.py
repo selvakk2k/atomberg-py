@@ -110,3 +110,68 @@ async def test_generate_otp_api_failure() -> None:
 
     with pytest.raises(AtombergConnectionError, match="Failed to generate lock PIN"):
         await pin_client.generate_remote_otp(device_id="invalid_lock")
+
+
+def test_quantize_expiration_time() -> None:
+    """Test rounding up to nearest half-hour and hour boundaries in IST."""
+    import datetime
+    from pyatomberg.lock.dynamic_pin import quantize_expiration_time
+
+    tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+    # Vector 1 generation at 21:31:08 IST -> 22:00:00 IST
+    t1 = datetime.datetime(2026, 10, 27, 21, 31, 8, tzinfo=tz)
+    assert quantize_expiration_time(t1, duration_hours=0.5) == datetime.datetime(2026, 10, 27, 22, 0, 0, tzinfo=tz)
+
+    # Vector 2 generation at 03:50:58 IST -> 04:00:00 IST
+    t2 = datetime.datetime(2026, 10, 28, 3, 50, 58, tzinfo=tz)
+    assert quantize_expiration_time(t2, duration_hours=0.5) == datetime.datetime(2026, 10, 28, 4, 0, 0, tzinfo=tz)
+
+    # Half-hour boundary at 03:12:00 IST -> 03:30:00 IST
+    t3 = datetime.datetime(2026, 10, 28, 3, 12, 0, tzinfo=tz)
+    assert quantize_expiration_time(t3, duration_hours=0.5) == datetime.datetime(2026, 10, 28, 3, 30, 0, tzinfo=tz)
+
+
+def test_calculate_offline_otp_hardware_vectors() -> None:
+    """Test offline OTP calculation against hardware verified vectors."""
+    import datetime
+    from pyatomberg.lock.dynamic_pin import calculate_offline_otp
+
+    tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+    auth_code = "482B2C89"
+    aes_key = "AgABfsR33DdoSdMe"
+    mac = "63c9c483b94a"
+
+    # Hardware Vector 1: 2026-10-27 22:00:00 IST -> 23385749
+    dt1 = datetime.datetime(2026, 10, 27, 22, 0, 0, tzinfo=tz)
+    otp1 = calculate_offline_otp(auth_code=auth_code, aes_key=aes_key, target_dt=dt1, lock_mac=mac)
+    assert otp1 == "23385749"
+    assert len(otp1) == 8
+
+    # Hardware Vector 2: 2026-10-28 04:00:00 IST -> 08959209
+    dt2 = datetime.datetime(2026, 10, 28, 4, 0, 0, tzinfo=tz)
+    otp2 = calculate_offline_otp(auth_code=auth_code, aes_key=aes_key, target_dt=dt2, lock_mac=mac)
+    assert otp2 == "08959209"
+    assert len(otp2) == 8
+
+
+def test_calculate_offline_otp_slot_variation() -> None:
+    """Test generating distinct codes for the same time period using slot indices."""
+    import datetime
+    from pyatomberg.lock.dynamic_pin import calculate_offline_otp
+
+    tz = datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+    auth_code = "482B2C89"
+    aes_key = "AgABfsR33DdoSdMe"
+    mac = "63c9c483b94a"
+    dt = datetime.datetime(2026, 10, 28, 4, 0, 0, tzinfo=tz)
+
+    otp_slot0 = calculate_offline_otp(auth_code=auth_code, aes_key=aes_key, target_dt=dt, lock_mac=mac, slot_index=0)
+    otp_slot1 = calculate_offline_otp(auth_code=auth_code, aes_key=aes_key, target_dt=dt, lock_mac=mac, slot_index=1)
+    otp_slot2 = calculate_offline_otp(auth_code=auth_code, aes_key=aes_key, target_dt=dt, lock_mac=mac, slot_index=2)
+
+    assert len(otp_slot0) == 8
+    assert len(otp_slot1) == 8
+    assert len(otp_slot2) == 8
+    assert otp_slot0 != otp_slot1
+    assert otp_slot1 != otp_slot2
+

@@ -4,20 +4,21 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/pyatomberg.svg)](https://pypi.org/project/pyatomberg/)
 
-An asynchronous Python library for controlling and monitoring **Atomberg smart door locks** (SL1, SL1 Pro) via Bluetooth Low Energy (BLE) and **Atomberg smart ceiling fans** over local network UDP.
+An asynchronous Python library for authentication, discovery, and control of **Atomberg smart home devices** (smart door locks, smart ceiling fans, and connected appliances).
 
-> **Home Assistant Users**:
-> For the ready-to-use Home Assistant custom integration, see **[`ha-atomberg-lock`](https://github.com/selvakk2k/ha-atomberg-lock)**.
-> For offline local IR control of Atomberg ceiling fans, see **[`ha-bldc-fan-ir`](https://github.com/selvakk2k/ha-bldc-fan-ir)**.
+> [!NOTE]
+> **Ceiling Fan Integration**:
+> For Home Assistant users seeking control of Atomberg smart ceiling fans, an integration supporting both Cloud and IR control is already available at [`dasshubham762/atomberg-integration`](https://github.com/dasshubham762/atomberg-integration).
 
 ---
 
 ## Features
 
-- **Direct Offline BLE Control**: High-speed, local AES-128 encrypted locking, unlocking, and battery monitoring.
-- **Universal Cognito OAuth2 + PKCE**: Imports registered lock encryption credentials directly from your Atomberg account via AWS Cognito Hosted UI (Email, Google, Apple, or Facebook).
+- **Universal Authentication Engine**: Native AWS Cognito OAuth2 + PKCE supporting Email, Google, Apple, and Facebook logins, plus official Developer API token management.
+- **Multi-Device Discovery**: Discovers and imports paired smart locks, ceiling fans, and connected appliances associated with your Atomberg account.
+- **Direct Offline BLE Lock Control**: High-speed, local AES-128 encrypted locking, unlocking, and battery monitoring for SL1 / SL1 Pro smart locks.
+- **Offline Dynamic OTP PINs**: Offline algorithmic generation of single-use remote OTPs and expirable timed guest PINs with automatic half-hour boundary quantization.
 - **Hardware Audit Logging**: Real-time decoding of credential unlock records (fingerprint slot, NFC card, keypad PIN, or mobile app).
-- **Remote & Timed OTP Keypad PINs**: Generates single-use remote OTPs and expirable timed guest PINs via Atomberg's dynamic PIN API.
 - **Local Fan Protocol**: Asynchronous UDP listener and state tracker for Atomberg Wi-Fi smart fans.
 
 ---
@@ -90,5 +91,4 @@ asyncio.run(main())
 ## Credits & License
 
 - Based on reverse-engineering and initial BLE protocol implementation by **[dreadedlama/atomberg-lock](https://github.com/dreadedlama/atomberg-lock)**.
-- Companion Home Assistant custom component: **[`ha-atomberg-lock`](https://github.com/selvakk2k/ha-atomberg-lock)**.
 - Licensed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE) for details.
