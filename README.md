@@ -8,7 +8,7 @@ An asynchronous Python library for authentication, discovery, and control of **A
 
 > [!NOTE]
 > **Ceiling Fan Integration**:
-> For Home Assistant users seeking control of Atomberg smart ceiling fans, an integration supporting both Cloud and IR control is already available at [`dasshubham762/atomberg-integration`](https://github.com/dasshubham762/atomberg-integration).
+> For Home Assistant users seeking control of Atomberg smart ceiling fans, an integration supporting both Cloud, Local and IR control is already available at [`dasshubham762/atomberg-integration`](https://github.com/dasshubham762/atomberg-integration).
 
 ---
 
