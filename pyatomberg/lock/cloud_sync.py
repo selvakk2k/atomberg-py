@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import aiohttp
@@ -163,3 +164,74 @@ class AtombergCloudSync:
         finally:
             if self._owns_session and self._session and not self._session.closed:
                 await self._session.close()
+
+    async def get_dynamic_otp(
+        self,
+        device_id: str,
+        start_time: int | None = None,
+        end_time: int | None = None,
+    ) -> dict[str, Any]:
+        """Fetch an active 6-digit dynamic OTP for an SL1/Azhero smart lock from the cloud."""
+        headers = {
+            "Authorization": f"Bearer {self._token}",
+            "User-Agent": "Atomberg/7.7.2",
+            "Content-Type": "application/json",
+            "Accept": "application/json",
+        }
+
+        session = self._session
+        if session is None or session.closed:
+            session = aiohttp.ClientSession()
+            self._session = session
+
+        now_ts = int(time.time())
+        s_time = start_time if start_time is not None else now_ts
+        e_time = end_time if end_time is not None else (now_ts + 1800)
+
+        clean_id = device_id.replace(":", "").replace("-", "").lower()
+        payload = {
+            "device_id": clean_id,
+            "start_time": s_time,
+            "end_time": e_time,
+        }
+
+        urls = [
+            f"{self._base_url}/lrp/get_otp",
+            f"{self._base_url}/get_lock_dynamic_pin",
+            f"{self._base_url}/lrp/get_dynamic_password",
+        ]
+
+        last_error: str | None = None
+        for url in urls:
+            try:
+                async with session.post(
+                    url, json=payload, headers=headers, timeout=aiohttp.ClientTimeout(total=10)
+                ) as resp:
+                    if resp.status == 200:
+                        data: dict[str, Any] = await resp.json(content_type=None)
+                        otp_val = None
+                        if isinstance(data, dict):
+                            msg_data = data.get("message", {}).get("data", {})
+                            if isinstance(msg_data, dict):
+                                otp_val = msg_data.get("otp") or msg_data.get("password") or msg_data.get("pin")
+                            if not otp_val and isinstance(data.get("data"), dict):
+                                otp_val = data["data"].get("otp") or data["data"].get("password")
+                            if not otp_val:
+                                otp_val = data.get("otp") or data.get("password") or data.get("pin")
+
+                        if otp_val:
+                            _LOGGER.info("Retrieved active cloud OTP for lock %s: %s", clean_id, otp_val)
+                            return {
+                                "otp": str(otp_val),
+                                "start_time": s_time,
+                                "end_time": e_time,
+                                "raw_response": data,
+                            }
+                    else:
+                        last_error = f"HTTP {resp.status}"
+            except Exception as ex:
+                last_error = str(ex)
+                continue
+
+        raise AtombergConnectionError(f"Failed to fetch dynamic OTP from cloud: {last_error}")
+

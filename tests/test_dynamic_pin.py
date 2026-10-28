@@ -175,3 +175,33 @@ def test_calculate_offline_otp_slot_variation() -> None:
     assert otp_slot0 != otp_slot1
     assert otp_slot1 != otp_slot2
 
+
+@pytest.mark.asyncio
+async def test_cloud_sync_get_dynamic_otp() -> None:
+    """Test fetching active dynamic 6-digit OTP from cloud sync client."""
+    from pyatomberg.lock.cloud_sync import AtombergCloudSync
+
+    mock_resp = MagicMock()
+    mock_resp.status = 200
+    mock_resp.json = AsyncMock(return_value={
+        "status": True,
+        "message": {
+            "data": {
+                "otp": "482913",
+            }
+        }
+    })
+
+    mock_session = MagicMock()
+    mock_session.closed = False
+    mock_session.post.return_value.__aenter__ = AsyncMock(return_value=mock_resp)
+    mock_session.post.return_value.__aexit__ = AsyncMock(return_value=None)
+
+    sync = AtombergCloudSync(access_token="test_jwt_token", session=mock_session)
+    res = await sync.get_dynamic_otp(device_id="63:c9:c4:83:b9:4a")
+
+    assert res["otp"] == "482913"
+    assert res["end_time"] > res["start_time"]
+    assert mock_session.post.called
+
+
