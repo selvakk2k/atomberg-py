@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "pyatomberg"
 version = "0.1.0"
-description = "Python library for Atomberg smart door locks (SL1 / SL1 Pro) and smart ceiling fans with BLE control and cloud sync"
+description = "Python library for Atomberg smart home authentication, device discovery, and offline protocol codecs"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "GPL-3.0-or-later"
@@ -27,7 +27,6 @@ classifiers = [
 ]
 dependencies = [
     "aiohttp>=3.9.0",
-    "bleak>=0.21.0",
     "cryptography>=41.0.0",
     "pydantic>=2.0.0",
 ]

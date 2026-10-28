@@ -1,9 +1,8 @@
-"""Tests for BLE lock pairing and credential extraction."""
+"""Tests for offline lock credential extraction and pairing results."""
 
 import pytest
 from pyatomberg.exceptions import AtombergCryptoError, AtombergPairingError
 from pyatomberg.lock.pairing import (
-    AtombergBLEPairingManager,
     PairingResult,
     extract_keys_from_btsnoop,
 )
@@ -32,17 +31,7 @@ def test_extract_btsnoop_invalid_file(tmp_path):
         extract_keys_from_btsnoop(dummy_file)
 
 
-@pytest.mark.asyncio
-async def test_pairing_manager_custom_key_validation():
-    """Verify key and salt length validation during native pairing."""
-    manager = AtombergBLEPairingManager()
-
-    with pytest.raises(AtombergPairingError, match="Master key must be exactly 16 bytes"):
-        await manager.pair_device("AA:BB:CC:DD:EE:FF", custom_key=b"short_key")
-
-    with pytest.raises(AtombergPairingError, match="Lock salt must be exactly 4 bytes"):
-        await manager.pair_device(
-            "AA:BB:CC:DD:EE:FF",
-            custom_key=b"\x00" * 16,
-            custom_salt=b"long_salt_here",
-        )
+def test_extract_btsnoop_file_not_found():
+    """Verify FileNotFoundError when log file does not exist."""
+    with pytest.raises(FileNotFoundError):
+        extract_keys_from_btsnoop("non_existent_file.btsnoop")
