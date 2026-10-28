@@ -1,4 +1,4 @@
-# Atomberg Devices Python Library (`atomberg-py`)
+# Atomberg Devices Python Library (`pyatomberg`)
 
 [![Hardware Verified](https://img.shields.io/badge/Hardware-Verified%20(SL1%20Pro)-success.svg)](#hardware-compatibility-matrix)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
@@ -76,8 +76,8 @@ pip install pyatomberg
 For local development or testing from source:
 
 ```bash
-git clone https://github.com/selvakk2k/atomberg-py.git
-cd atomberg-py
+git clone https://github.com/selvakk2k/pyatomberg.git
+cd pyatomberg
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
